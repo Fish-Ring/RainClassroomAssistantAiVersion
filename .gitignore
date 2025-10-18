@@ -1,0 +1,7 @@
+__pycache__
+config.json
+dist
+build
+build.cmd
+downloads
+.vscode

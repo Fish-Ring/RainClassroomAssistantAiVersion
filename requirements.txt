@@ -1,0 +1,14 @@
+PyQt5
+pyttsx3
+requests
+urllib3
+websocket_client
+fpdf
+numpy
+deepdiff
+Pillow
+PyPDF2
+win10toast; platform_system=='Windows'
+pyinstaller
+pre-commit
+openai
