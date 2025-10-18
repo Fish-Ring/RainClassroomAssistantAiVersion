@@ -1,100 +1,101 @@
-# This workflow will build Windows EXE using PyInstaller and create GitHub Releases
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
+---
 name: Build Windows EXE
 
-on:
+'on':
   push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - '.gitignore'
+    branches: [main, master]
   pull_request:
-    branches:
-      - main
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          if (Test-Path requirements.txt) {
+            pip install -r requirements.txt
+          }
 
-    - name: Install PyInstaller
-      run: |
-        pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --onefile --windowed `
+            --name RainClassroomAssistantAi main.py
 
-    - name: Build executable with PyInstaller
-      run: |
-        pyinstaller --noconfirm RainClassroomAssistantAi.spec
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: RainClassroomAssistant-Windows-EXE
-        path: dist/RainClassroomAssistantAi.exe
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/RainClassroomAssistantAi.exe
 
   release:
     needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
+    runs-on: windows-latest
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Download artifact
-      uses: actions/download-artifact@v3
-      with:
-        name: RainClassroomAssistant-Windows-EXE
-        path: ./dist
-        
-    - name: Get version from file_version_info.txt
-      id: get_version
-      run: |
-        version=$(python -c "
-import re
-with open('file_version_info.txt', 'r') as f:
-    content = f.read()
-    match = re.search(r\"u'FileVersion', u'([^']+)'\", content)
-    if match:
-        print('v' + match.group(1))
-    ")
-        echo "VERSION=$version" >> $GITHUB_ENV
-        
-    - name: Calculate hash for Windows executable
-      id: hash_windows
-      run: |
-        hash=$(sha256sum ./dist/RainClassroomAssistantAi.exe | cut -d ' ' -f 1)
-        echo "hash_windows=$hash" >> $GITHUB_OUTPUT
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: ./dist/RainClassroomAssistantAi.exe
-        tag_name: ${{ env.VERSION }}
-        name: Release ${{ env.VERSION }}
-        body: |
-          ## Changes
-          - Automated Windows EXE build
-          
-          ## File Hash (SHA256)
-          RainClassroomAssistantAi.exe: ${{ steps.hash_windows.outputs.hash_windows }}
-        draft: false
-        prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: ./dist/
+
+      - name: Get version
+        id: version
+        run: |
+          $version = Get-Date -Format "yyyyMMdd-HHmmss"
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Calculate hash
+        id: hash
+        run: |
+          $hash = (Get-FileHash `
+            -Path ./dist/RainClassroomAssistantAi.exe `
+            -Algorithm SHA256).Hash
+          echo "hash=$hash" >> $env:GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: >-
+            Release v${{ steps.version.outputs.version }}
+          body: |
+            Windows executable for RainClassroomAssistantAi
+
+            SHA256: `${{ steps.hash.outputs.hash }}`
+
+            Built on: ${{ github.event.head_commit.timestamp }}
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: >-
+            ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/RainClassroomAssistantAi.exe
+          asset_name: RainClassroomAssistantAi.exe
+          asset_content_type: application/octet-stream
