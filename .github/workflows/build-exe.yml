@@ -1,6 +1,3 @@
-# This workflow will build Windows EXE using PyInstaller and create GitHub Releases
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
 name: Build Windows EXE
 
 on:
@@ -61,7 +58,6 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: RainClassroomAssistant-Windows-EXE
-        path: ./dist
         
     - name: Get version from file_version_info.txt
       id: get_version
@@ -76,24 +72,12 @@ with open('file_version_info.txt', 'r') as f:
     ")
         echo "VERSION=$version" >> $GITHUB_ENV
         
-    - name: Calculate hash for Windows executable
-      id: hash_windows
-      run: |
-        hash=$(sha256sum ./dist/RainClassroomAssistantAi.exe | cut -d ' ' -f 1)
-        echo "hash_windows=$hash" >> $GITHUB_OUTPUT
-        
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
-        files: ./dist/RainClassroomAssistantAi.exe
+        files: RainClassroomAssistantAi.exe
         tag_name: ${{ env.VERSION }}
         name: Release ${{ env.VERSION }}
-        body: |
-          ## Changes
-          - Automated Windows EXE build
-          
-          ## File Hash (SHA256)
-          RainClassroomAssistantAi.exe: ${{ steps.hash_windows.outputs.hash_windows }}
         draft: false
         prerelease: false
       env:
