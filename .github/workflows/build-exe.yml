@@ -58,6 +58,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: RainClassroomAssistant-Windows-EXE
+        path: ./dist
         
     - name: Get version from file_version_info.txt
       id: get_version
