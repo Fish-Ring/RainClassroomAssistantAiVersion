@@ -29,6 +29,11 @@ except ImportError:
 
 
 class Lesson:
+    # 使用类级别静态变量来维护下载状态，确保即使Lesson实例重建，也能保持下载记录
+    _downloaded_presentations = set()
+    _downloading_presentations = set()
+    _download_lock = threading.Lock()
+    
     def __init__(self, lessonid, lessonname, classroomid, main_ui):
         self.classroomid = classroomid
         self.lessonid = lessonid
@@ -54,28 +59,52 @@ class Lesson:
         self.user_uid = rtn["id"]
         self.user_uname = rtn["name"]
         self.main_ui = main_ui
-        # self.pptmanager_dict = {}
 
-    def _download(self, data):
-        data["title"] = data["title"].replace("/", "_").strip()
-        self.print_problems(data)
-        self.add_message("开始下载ppt : " + data["title"] + ".pdf", 0)
-        try:
-            pdfname, usetime = PPTManager(data, self.lessonname).start()
-            if pdfname is None or usetime is None:
-                if is_debug():
-                    self.add_message(
-                        "重复下载ppt取消 : " + pdfname + f"，耗时{usetime}秒", 0
-                    )
+    def _download(self, presentationid):
+        # 确保presentationid是字符串类型，避免类型不匹配导致的重复下载
+        presentationid_str = str(presentationid)
+        
+        # 立即检查并标记下载状态，避免重复触发
+        with Lesson._download_lock:
+            # 再次检查，确保在加锁期间没有其他线程已经开始下载
+            if presentationid_str in Lesson._downloaded_presentations or presentationid_str in Lesson._downloading_presentations:
+                print(f"跳过重复下载: {presentationid_str}")
                 return
-            self.add_message("下载ppt成功 : " + pdfname + f"，耗时{usetime}秒", 0)
+            # 标记为正在下载
+            Lesson._downloading_presentations.add(presentationid_str)
+        
+        try:
+            # 获取PPT数据
+            ppt_data = self._get_ppt(presentationid)
+            title = ppt_data["title"].replace("/", "_").strip()
+            self.print_problems(ppt_data)
+            self.add_message("开始下载ppt : " + title + ".pdf", 0)
+            
+            # 执行下载
+            pdfname, usetime = PPTManager(ppt_data, self.lessonname).start()
+            
+            if pdfname and usetime:
+                self.add_message("下载ppt成功 : " + pdfname + f"，耗时{usetime}秒", 0)
+                # 下载成功时，添加到已下载列表
+                with Lesson._download_lock:
+                    Lesson._downloaded_presentations.add(presentationid_str)
+                    print(f"已将 {presentationid_str} 添加到全局已下载列表，当前已下载数量: {len(Lesson._downloaded_presentations)}")
+            else:
+                self.add_message("下载ppt完成但未返回文件信息", 0)
         except Exception as e:
-            self.add_message("下载ppt失败 : " + data["title"] + ".pdf", 0)
+            self.add_message("下载ppt失败 : " + title + ".pdf", 0)
             self.add_message(traceback.format_exc(), 0)
-
+            print(f"下载PPT {presentationid_str} 失败: {e}")
+        finally:
+            # 无论成功失败，都从正在下载列表中移除
+            with Lesson._download_lock:
+                Lesson._downloading_presentations.discard(presentationid_str)
+                print(f"从全局正在下载列表移除 {presentationid_str}，当前正在下载数量: {len(Lesson._downloading_presentations)}")
+    
     def download_ppt(self, presentationid):
+        # 在新线程中执行下载
         threading.Thread(
-            target=self._download, args=(self._get_ppt(presentationid),), daemon=True
+            target=self._download, args=(presentationid,), daemon=True
         ).start()
 
     def _get_ppt(self, presentationid):
@@ -281,11 +310,17 @@ class Lesson:
                 print(f"添加后的题目列表长度: {len(self.problems_ls)}")
                 for problem in self.problems_ls:
                     self.problems_dict[problem["index"]] = problem["answers"]
+                # 直接调用download_ppt，内部会处理重复检查
                 self.download_ppt(presentationid)
-            self.unlocked_problem = data["unlockedproblem"]
-            print(f"未解锁的题目: {self.unlocked_problem}")
-            for problemid in self.unlocked_problem:
-                self._current_problem(wsapp, problemid)
+            # 检查unlockedproblem字段是否存在
+            if "unlockedproblem" in data:
+                self.unlocked_problem = data["unlockedproblem"]
+                print(f"未解锁的题目: {self.unlocked_problem}")
+                for problemid in self.unlocked_problem:
+                    self._current_problem(wsapp, problemid)
+            else:
+                print("未找到unlockedproblem字段，可能服务器响应格式已更改")
+                self.unlocked_problem = []
         elif op == "unlockproblem":
             problem_id = data["problem"]["sid"]
             problem_limit = data["problem"]["limit"]
@@ -301,11 +336,13 @@ class Lesson:
             self.problems_ls.extend(self.get_problems(data["presentation"]))
             for problem in self.problems_ls:
                 self.problems_dict[problem["index"]] = problem["answers"]
+            # 直接调用download_ppt，内部会处理重复检查
             self.download_ppt(data["presentation"])
         elif op == "presentationcreated":
             self.problems_ls.extend(self.get_problems(data["presentation"]))
             for problem in self.problems_ls:
                 self.problems_dict[problem["index"]] = problem["answers"]
+            # 直接调用download_ppt，内部会处理重复检查
             self.download_ppt(data["presentation"])
         elif op == "newdanmu" and self.config["auto_danmu"]:
             current_content = data["danmu"].lower()

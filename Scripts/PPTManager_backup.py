@@ -12,12 +12,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 class PPTManager:
     threading_count = 8
+    title_dict = {}
 
     def __init__(self, data, lessonname, downloadpath="downloads"):
         self.lessonname = self.validateTitle(lessonname)
         self.title = self.validateTitle(data["title"]).strip()
-        # 不在初始化时添加标题到字典，只在开始下载时添加
-        # self.title_dict[self.title] = 1
+        self.title_dict[self.title] = 1
         self.timestamp = str(time.time())
         self.timeinfo = time.strftime(
             "%Y%m%d-%H%M%S", time.localtime(float(self.timestamp))
@@ -149,17 +149,14 @@ class PPTManager:
         os.rmdir(self.imgpath)
 
     def start(self):
-        # 移除标题检测逻辑，只使用Classes.py中的presentationid检测
-        try:
-            self.download()
-            pdfname = self.generate_ppt()
-            self.delete_cache()
-            usetime = round(time.time() - float(self.timestamp), 4)
-            return pdfname, usetime
-        except Exception as e:
-            # 记录异常但不再使用标题字典
-            print(f"下载PPT '{self.title}' 时发生异常: {e}")
+        if self.title_dict.get(self.title) is None:
             return None, None
+        self.download()
+        pdfname = self.generate_ppt()
+        self.delete_cache()
+        usetime = round(time.time() - float(self.timestamp), 4)
+        del self.title_dict[self.title]
+        return pdfname, usetime
 
     def __eq__(self, __value: object) -> bool:
         if self.title != __value.title:
