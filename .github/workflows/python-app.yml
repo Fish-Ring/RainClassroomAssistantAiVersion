@@ -1,6 +1,12 @@
 ---
 name: Build Windows EXE
 
+# 添加权限配置以允许创建发布
+permissions:
+  contents: write    # 允许写入仓库内容（创建发布）
+  issues: write      # 允许写入 issues
+  pull-requests: write  # 允许写入 PR
+
 'on':
   push:
     branches: [main, master]
@@ -43,9 +49,8 @@ jobs:
   release:
     needs: build
     runs-on: windows-latest
-    if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
+    # 只在 push 到 main 分支时创建发布，不在 PR 时创建
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout code
@@ -71,14 +76,29 @@ jobs:
             -Algorithm SHA256).Hash
           echo "hash=$hash" >> $env:GITHUB_OUTPUT
 
+      - name: Check prerequisites
+        run: |
+          if (!(Test-Path "./dist/RainClassroomAssistantAi.exe")) {
+            Write-Error "Executable not found in ./dist/"
+            exit 1
+          }
+          Write-Output "All prerequisites met"
+
+      - name: Debug GitHub Context
+        run: |
+          Write-Output "Event name: ${{ github.event_name }}"
+          Write-Output "Ref: ${{ github.ref }}"
+          Write-Output "Repository: ${{ github.repository }}"
+          Write-Output "Actor: ${{ github.actor }}"
+          Write-Output "Token available: $([bool]$env:GITHUB_TOKEN)"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: >-
-            Release v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
           body: |
             Windows executable for RainClassroomAssistantAi
 

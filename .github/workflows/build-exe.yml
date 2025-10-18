@@ -6,6 +6,12 @@
 
 name: Build Windows EXE
 
+# 添加权限配置以允许创建发布
+permissions:
+  contents: write  # 允许写入仓库内容（创建发布）
+  issues: write    # 允许写入 issues
+  pull-requests: write  # 允许写入 PR
+
 'on':
   push:
     branches:
@@ -54,7 +60,8 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # 只在 push 到 main 分支时创建发布，不在 PR 时创建
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout code
@@ -66,32 +73,77 @@ jobs:
           name: RainClassroomAssistant-Windows-EXE
           path: ./dist
 
+      - name: Check version file exists
+        run: |
+          if [ ! -f "file_version_info.txt" ]; then
+            echo "Error: file_version_info.txt not found"
+            exit 1
+          fi
+          echo "Version file found"
+
+      - name: Debug GitHub Context
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Token available: $([ -n "$GITHUB_TOKEN" ] && echo "true" || echo "false")"
+
       - name: Get version from file_version_info.txt
         id: get_version
+        shell: bash
         run: |
           version=$(python -c "
           import re
-          with open('file_version_info.txt', 'r') as f:
-              content = f.read()
-              match = re.search(r\"u'FileVersion', u'([^']+)'\", content)
-              if match:
-                  print('v' + match.group(1))
+          try:
+              with open('file_version_info.txt', 'r', encoding='utf-8') as f:
+                  content = f.read()
+                  match = re.search(r\"u'FileVersion', u'([^']+)'\", content)
+                  if match:
+                      print('v' + match.group(1))
+                  else:
+                      print('v1.0.0')  # 默认版本
+          except Exception as e:
+              print('v1.0.0')  # 出错时使用默认版本
           ")
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "Detected version: $version"
 
       - name: Calculate hash for Windows executable
         id: hash_windows
+        shell: bash
         run: |
           hash=$(sha256sum ./dist/RainClassroomAssistantAi.exe | \
             cut -d ' ' -f 1)
           echo "hash_windows=$hash" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        id: create_release
+        uses: softprops/action-gh-release@v2
         with:
           files: ./dist/RainClassroomAssistantAi.exe
           tag_name: ${{ env.VERSION }}
           name: Release ${{ env.VERSION }}
+          body: |
+            ## Changes
+            - Automated Windows EXE build
+
+            ## File Hash (SHA256)
+            RainClassroomAssistantAi.exe:
+              ${{ steps.hash_windows.outputs.hash_windows }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Retry Release if Failed
+        if: steps.create_release.outcome == 'failure'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/RainClassroomAssistantAi.exe
+          tag_name: ${{ env.VERSION }}
+          name: Release ${{ env.VERSION }} (Retry)
           body: |
             ## Changes
             - Automated Windows EXE build
