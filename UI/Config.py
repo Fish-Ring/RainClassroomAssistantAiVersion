@@ -182,18 +182,18 @@ class Config_Ui(object):
         self.answer_on = QtWidgets.QCheckBox(self.answer_config)
         self.answer_on.setObjectName("answer_on")
         self.verticalLayout_5.addWidget(self.answer_on)
-        
+
         self.ai_answer_on = QtWidgets.QCheckBox(self.answer_config)
         self.ai_answer_on.setObjectName("ai_answer_on")
         self.ai_answer_on.setText("启用AI答案获取")
         self.verticalLayout_5.addWidget(self.ai_answer_on)
-        
+
         # AI配置部分
         self.ai_config_group = QtWidgets.QGroupBox(self.answer_config)
         self.ai_config_group.setObjectName("ai_config_group")
         self.ai_config_layout = QtWidgets.QVBoxLayout(self.ai_config_group)
         self.ai_config_layout.setObjectName("ai_config_layout")
-        
+
         # API密钥配置
         self.api_key_widget = QtWidgets.QWidget(self.ai_config_group)
         self.api_key_layout = QtWidgets.QHBoxLayout(self.api_key_widget)
@@ -203,7 +203,7 @@ class Config_Ui(object):
         self.api_key_layout.addWidget(self.api_key_label)
         self.api_key_layout.addWidget(self.api_key_input)
         self.ai_config_layout.addWidget(self.api_key_widget)
-        
+
         # Base URL配置
         self.base_url_widget = QtWidgets.QWidget(self.ai_config_group)
         self.base_url_layout = QtWidgets.QHBoxLayout(self.base_url_widget)
@@ -213,7 +213,7 @@ class Config_Ui(object):
         self.base_url_layout.addWidget(self.base_url_label)
         self.base_url_layout.addWidget(self.base_url_input)
         self.ai_config_layout.addWidget(self.base_url_widget)
-        
+
         # 模型配置
         self.model_widget = QtWidgets.QWidget(self.ai_config_group)
         self.model_layout = QtWidgets.QHBoxLayout(self.model_widget)
@@ -223,14 +223,14 @@ class Config_Ui(object):
         self.model_layout.addWidget(self.model_label)
         self.model_layout.addWidget(self.model_input)
         self.ai_config_layout.addWidget(self.model_widget)
-        
+
         # AI消息弹窗开关
         self.ai_popup_checkbox = QtWidgets.QCheckBox(self.ai_config_group)
         self.ai_popup_checkbox.setObjectName("ai_popup_checkbox")
         self.ai_popup_checkbox.setText("启用AI消息弹窗")
         self.ai_popup_checkbox.setToolTip("控制是否显示AI相关的消息弹窗提示")
         self.ai_config_layout.addWidget(self.ai_popup_checkbox)
-        
+
         # Temperature参数配置
         self.temperature_widget = QtWidgets.QWidget(self.ai_config_group)
         self.temperature_layout = QtWidgets.QHBoxLayout(self.temperature_widget)
@@ -240,11 +240,13 @@ class Config_Ui(object):
         self.temperature_input.setSingleStep(0.1)
         self.temperature_input.setValue(0.1)
         self.temperature_input.setDecimals(1)
-        self.temperature_input.setToolTip("控制生成答案的随机性，值越低答案越确定，值越高答案越随机")
+        self.temperature_input.setToolTip(
+            "控制生成答案的随机性，值越低答案越确定，值越高答案越随机"
+        )
         self.temperature_layout.addWidget(self.temperature_label)
         self.temperature_layout.addWidget(self.temperature_input)
         self.ai_config_layout.addWidget(self.temperature_widget)
-        
+
         # Top_p参数配置
         self.top_p_widget = QtWidgets.QWidget(self.ai_config_group)
         self.top_p_layout = QtWidgets.QHBoxLayout(self.top_p_widget)
@@ -254,11 +256,13 @@ class Config_Ui(object):
         self.top_p_input.setSingleStep(0.1)
         self.top_p_input.setValue(0.9)
         self.top_p_input.setDecimals(1)
-        self.top_p_input.setToolTip("控制生成答案的多样性，值越低答案越集中，值越高答案越多样")
+        self.top_p_input.setToolTip(
+            "控制生成答案的多样性，值越低答案越集中，值越高答案越多样"
+        )
         self.top_p_layout.addWidget(self.top_p_label)
         self.top_p_layout.addWidget(self.top_p_input)
         self.ai_config_layout.addWidget(self.top_p_widget)
-        
+
         self.verticalLayout_5.addWidget(self.ai_config_group)
         self.when_answer_on = QtWidgets.QWidget(self.answer_config)
         self.when_answer_on.setEnabled(False)
@@ -355,7 +359,7 @@ class Config_Ui(object):
             self.when_answer_on.setEnabled(False)
             self.ai_answer_on.setEnabled(False)
             self.ai_config_group.setEnabled(False)
-    
+
     def enable_ai_config(self):
         # 启用AI配置部分
         if self.ai_answer_on.isChecked():
@@ -416,26 +420,39 @@ class Config_Ui(object):
         # 答题配置
         self.answer_on.setChecked(config.get("auto_answer", False))
         self.ai_answer_on.setChecked(config.get("ai_answer", False))
-        
+
         # AI配置
         ai_config = config.get("ai_config", {})
         self.api_key_input.setText(ai_config.get("api_key", ""))
-        self.base_url_input.setText(ai_config.get("base_url", "https://api.siliconflow.cn/v1"))
-        self.model_input.setText(ai_config.get("model", "deepseek-ai/DeepSeek-V3.2-Exp"))
+        self.base_url_input.setText(
+            ai_config.get("base_url", "https://api.siliconflow.cn/v1")
+        )
+        self.model_input.setText(
+            ai_config.get("model", "deepseek-ai/DeepSeek-V3.2-Exp")
+        )
         self.ai_popup_checkbox.setChecked(ai_config.get("show_popup", True))
         self.temperature_input.setValue(ai_config.get("temperature", 0.1))
         self.top_p_input.setValue(ai_config.get("top_p", 0.9))
-        
+
         if config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 1:
             self.delay_time_radio_1.setChecked(True)
-        elif config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 2:
+        elif (
+            config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 2
+        ):
             self.delay_time_radio_2.setChecked(True)
-        elif config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 3:
+        elif (
+            config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 3
+        ):
             self.delay_time_radio_3.setChecked(True)
-        elif config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 4:
+        elif (
+            config.get("answer_config", {}).get("answer_delay", {}).get("type", 1) == 4
+        ):
             self.delay_time_radio_4.setChecked(True)
         self.delay_time_4_input.setValue(
-            config.get("answer_config", {}).get("answer_delay", {}).get("custom", {}).get("percent", 0)
+            config.get("answer_config", {})
+            .get("answer_delay", {})
+            .get("custom", {})
+            .get("percent", 0)
         )
         self.dialog_config = config
 
@@ -476,7 +493,7 @@ class Config_Ui(object):
         # 答题配置
         config["auto_answer"] = self.answer_on.isChecked()
         config["ai_answer"] = self.ai_answer_on.isChecked()
-        
+
         # 保存AI配置
         if "ai_config" not in config:
             config["ai_config"] = {}
@@ -486,7 +503,7 @@ class Config_Ui(object):
         config["ai_config"]["show_popup"] = self.ai_popup_checkbox.isChecked()
         config["ai_config"]["temperature"] = self.temperature_input.value()
         config["ai_config"]["top_p"] = self.top_p_input.value()
-        
+
         if self.delay_time_radio_1.isChecked():
             config["answer_config"]["answer_delay"]["type"] = 1
         elif self.delay_time_radio_2.isChecked():

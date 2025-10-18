@@ -187,7 +187,7 @@ class MainWindow_Ui(QtCore.QObject):
         dir_route = get_config_dir()
         config_route = get_config_path()
         self.config = self.check_config(dir_route, config_route)
-        
+
         # 初始化AI客户端
         init_ai_client(self.config)
 

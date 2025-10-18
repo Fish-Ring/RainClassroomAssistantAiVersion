@@ -146,7 +146,7 @@ def get_initial_data(old_config=None):
             "api_key": "",
             "base_url": "https://api.siliconflow.cn/v1",
             "model": "deepseek-ai/DeepSeek-V3.2-Exp",
-            "show_popup": True
+            "show_popup": True,
         },
     }
 

@@ -24,7 +24,11 @@ def get_version():
                     # 如果是Python解释器直接运行，从file_version_info.txt读取版本
                     with open("file_version_info.txt", "r") as f:
                         version_info = f.read()
-                    version = re.search("u'FileVersion', u'.*'", version_info).group().split("'")[3]
+                    version = (
+                        re.search("u'FileVersion', u'.*'", version_info)
+                        .group()
+                        .split("'")[3]
+                    )
                 else:
                     # 如果是exe文件运行，获取文件版本信息
                     info = win32api.GetFileVersionInfo(
