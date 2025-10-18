@@ -3,14 +3,14 @@ from openai import OpenAI
 
 # 默认配置
 DEFAULT_API_KEY = ""
-DEFAULT_MODEL = "deepseek-ai/DeepSeek-V3.2-Exp"
+DEFAULT_MODEL = "deepseek-ai/DeepSeek-R1"
 DEFAULT_BASE_URL = "https://api.siliconflow.cn/v1"
 
 # 全局变量，将在初始化时从配置读取
 my_sk = ""
 model = DEFAULT_MODEL
 client = None
-temperature = 0.1  # 默认temperature值
+temperature = 0.7  # 默认temperature值，增加随机性
 top_p = 0.9  # 默认top_p值
 
 def init_ai_client(config=None):
@@ -22,13 +22,13 @@ def init_ai_client(config=None):
         my_sk = ai_config.get("api_key", DEFAULT_API_KEY)
         model = ai_config.get("model", DEFAULT_MODEL)
         base_url = ai_config.get("base_url", DEFAULT_BASE_URL)
-        temperature = ai_config.get("temperature", 0.1)
+        temperature = ai_config.get("temperature", 0.7)  # 默认temperature值设为0.7
         top_p = ai_config.get("top_p", 0.9)
     else:
         my_sk = DEFAULT_API_KEY
         model = DEFAULT_MODEL
         base_url = DEFAULT_BASE_URL
-        temperature = 0.1
+        temperature = 0.7  # 默认temperature值设为0.7
         top_p = 0.9
     
     if my_sk:  # 只有提供了API密钥才创建客户端
@@ -94,11 +94,34 @@ def get_answer(question_info):
         
         # 如果有选项，构建选项字符串
         if options:
-            option_text = " ".join([f"{chr(65+i)}.{option}" for i, option in enumerate(options)])
+            # 处理选项格式，确保是字典格式
+            formatted_options = []
+            for option in options:
+                if isinstance(option, dict) and "key" in option and "value" in option:
+                    formatted_options.append(f"{option['key']}.{option['value']}")
+                elif isinstance(option, str):
+                    formatted_options.append(f"{chr(65+len(formatted_options))}.{option}")
+                else:
+                    formatted_options.append(f"{chr(65+len(formatted_options))}.{str(option)}")
+            
+            option_text = " ".join(formatted_options)
             problem_text = f"{title} {option_text}"
+        
+        # 添加调试信息，打印题目内容
+        print(f"AI获取到的题目内容 - title: '{title}', options: {options}, problem_text: '{problem_text}'")
+        print(f"题目类型: {question_type}, 是否有选项: {bool(options)}, 是否有预设答案: {bool(blanks)}")
+        
+        # 检查题目是否为空
+        if not problem_text.strip():
+            print("题目为空，无法获取答案")
+            return None
         
         # 检测是否为数学题
         is_math = is_math_problem(problem_text)
+        
+        # 添加更多调试信息
+        print(f"开始处理题目 - 题目类型: {question_type}, 是否为数学题: {is_math}")
+        print(f"使用的模型: {model}, temperature: {temperature}, top_p: {top_p}")
         
         # 对于填空题，如果有预设答案，优先使用
         if blanks and question_type == 3:
@@ -156,8 +179,8 @@ def get_answer(question_info):
                         题目：1+1=____，2+2=____。
                         输出：{"answer": ["2", "4"]}
                         
-                        题目：6+1=____。
-                        输出：{"answer": ["7"]}"""
+                        题目：8+1=____。
+                        输出：{"answer": ["9"]}"""
                     },
                     {"role": "user", "content": f"题目：{problem_text} 请直接回答，不要解释。"}
                 ],
@@ -252,7 +275,17 @@ def get_answer_retry(question_info):
         # 构建题目字符串
         problem_text = title
         if options:
-            option_text = " ".join([f"{chr(65+i)}.{option}" for i, option in enumerate(options)])
+            # 处理选项格式，确保是字典格式
+            formatted_options = []
+            for option in options:
+                if isinstance(option, dict) and "key" in option and "value" in option:
+                    formatted_options.append(f"{option['key']}.{option['value']}")
+                elif isinstance(option, str):
+                    formatted_options.append(f"{chr(65+len(formatted_options))}.{option}")
+                else:
+                    formatted_options.append(f"{chr(65+len(formatted_options))}.{str(option)}")
+            
+            option_text = " ".join(formatted_options)
             problem_text = f"{title} {option_text}"
         
         # 检测是否为数学题

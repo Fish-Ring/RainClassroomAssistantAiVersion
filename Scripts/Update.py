@@ -19,16 +19,24 @@ def get_version():
     else:
         if sys.platform.startswith("win"):
             try:
-                info = win32api.GetFileVersionInfo(
-                    win32api.GetModuleFileName(win32api.GetModuleHandle(None)), "\\"
-                )  # 获取文件版本信息
-                ms = info["FileVersionMS"]
-                ls = info["FileVersionLS"]
-                version = "%d.%d.%d" % (
-                    win32api.HIWORD(ms),
-                    win32api.LOWORD(ms),
-                    win32api.HIWORD(ls),
-                )
+                # 检查是否是Python解释器直接运行
+                if sys.executable.endswith("python.exe"):
+                    # 如果是Python解释器直接运行，从file_version_info.txt读取版本
+                    with open("file_version_info.txt", "r") as f:
+                        version_info = f.read()
+                    version = re.search("u'FileVersion', u'.*'", version_info).group().split("'")[3]
+                else:
+                    # 如果是exe文件运行，获取文件版本信息
+                    info = win32api.GetFileVersionInfo(
+                        win32api.GetModuleFileName(win32api.GetModuleHandle(None)), "\\"
+                    )  # 获取文件版本信息
+                    ms = info["FileVersionMS"]
+                    ls = info["FileVersionLS"]
+                    version = "%d.%d.%d" % (
+                        win32api.HIWORD(ms),
+                        win32api.LOWORD(ms),
+                        win32api.HIWORD(ls),
+                    )
             except:
                 # 如果获取版本信息失败，使用默认版本
                 version = "1.0.0"

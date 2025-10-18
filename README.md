@@ -10,6 +10,9 @@
     - 支持多种题型
     - 支持自定义模型
     - 不同模型，不同配置，答题效果不同，答案可能存在错误
+ - 可以在 https://cloud.siliconflow.cn/i/oPInZgjc 申请 SiliconFlow 账号并获取 API Key，如果可以的话请填写我的邀请码 oPInZgjc
+
+
 
  
 ## 使用方法

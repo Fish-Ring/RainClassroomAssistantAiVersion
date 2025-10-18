@@ -85,7 +85,19 @@ class Lesson:
             headers=self.headers,
             proxies={"http": None, "https": None},
         )
-        return dict_result(r.text)["data"]
+        data = dict_result(r.text)["data"]
+        print(f"原始PPT数据 (presentationid={presentationid}):", data)
+        
+        # 检查数据结构
+        if "slides" not in data:
+            print(f"警告：PPT数据中没有slides字段 (presentationid={presentationid})")
+            return data
+        
+        # 检查slides中是否有problem
+        slides_with_problems = [slide for slide in data["slides"] if "problem" in slide.keys()]
+        print(f"包含题目的幻灯片数量: {len(slides_with_problems)}")
+        
+        return data
 
     def print_problems(self, data):
         answers = {}
@@ -103,11 +115,48 @@ class Lesson:
     def get_problems(self, presentationid):
         # 获取课程ppt中的题目
         data = self._get_ppt(presentationid)
+        
+        # 检查数据结构
+        if "slides" not in data:
+            print(f"警告：PPT数据中没有slides字段 (presentationid={presentationid})")
+            return []
+        
         slides = [problem for problem in data["slides"] if "problem" in problem.keys()]
+        print(f"筛选后的题目幻灯片 (presentationid={presentationid}):", slides)
+        
         index = [problem["index"] for problem in slides]
         problems = [problem["problem"] for problem in slides]
+        
+        print(f"提取的题目数量: {len(problems)}")
+        
         for i in range(len(problems)):
             problems[i]["index"] = index[i]
+            print(f"题目 {i+1}:", problems[i])
+            # 确保题目有必要的字段
+            if "problemId" not in problems[i]:
+                problems[i]["problemId"] = problems[i].get("id", "")
+            if "title" not in problems[i] or not problems[i].get("title", ""):
+                # 对于填空题，题目内容通常在body字段中
+                if problems[i].get("problemType") == 4:  # 填空题
+                    problems[i]["title"] = problems[i].get("body", "")
+                else:
+                    # 对于选择题，也尝试从body字段获取题目内容
+                    problems[i]["title"] = problems[i].get("body", "") or problems[i].get("description", "")
+            if "options" not in problems[i]:
+                problems[i]["options"] = problems[i].get("choices", [])
+            if "answers" not in problems[i]:
+                problems[i]["answers"] = problems[i].get("correctAnswers", [])
+            if "problemType" not in problems[i]:
+                problems[i]["problemType"] = problems[i].get("type", 1)
+            if "blanks" not in problems[i]:
+                problems[i]["blanks"] = problems[i].get("fillBlanks", [])
+            
+            # 检查题目内容是否为空
+            title = problems[i].get("title", "")
+            options = problems[i].get("options", [])
+            print(f"题目 {i+1} 内容检查 - title: '{title}', options: {options}")
+            
+            print(f"处理后的题目 {i+1}:", problems[i])
         return problems
 
     def answer_questions(self, problemid, problemtype, answer, limit):
@@ -216,21 +265,33 @@ class Lesson:
                     ]
                 )
             )
-            print(data)
-            current_presentation = data["presentation"]
-            if current_presentation not in presentations:
+            print("hello数据:", data)
+            print("提取的presentations:", presentations)
+            # 检查presentation字段是否存在
+            current_presentation = data.get("presentation", "")
+            if current_presentation and current_presentation not in presentations:
                 presentations.append(current_presentation)
+            print(f"处理前的题目列表长度: {len(self.problems_ls)}")
             for presentationid in presentations:
                 # print(presentationid)
-                self.problems_ls.extend(self.get_problems(presentationid))
+                print(f"处理presentationid: {presentationid}")
+                new_problems = self.get_problems(presentationid)
+                print(f"获取到的新题目数量: {len(new_problems)}")
+                self.problems_ls.extend(new_problems)
+                print(f"添加后的题目列表长度: {len(self.problems_ls)}")
                 for problem in self.problems_ls:
                     self.problems_dict[problem["index"]] = problem["answers"]
                 self.download_ppt(presentationid)
             self.unlocked_problem = data["unlockedproblem"]
+            print(f"未解锁的题目: {self.unlocked_problem}")
             for problemid in self.unlocked_problem:
                 self._current_problem(wsapp, problemid)
         elif op == "unlockproblem":
-            self.start_answer(data["problem"]["sid"], data["problem"]["limit"])
+            problem_id = data["problem"]["sid"]
+            problem_limit = data["problem"]["limit"]
+            print(f"收到unlockproblem事件，题目ID: {problem_id}, 限制时间: {problem_limit}")
+            print(f"当前题目列表: {[p['problemId'] for p in self.problems_ls]}")
+            self.start_answer(problem_id, problem_limit)
         elif op == "lessonfinished":
             meg = "%s下课了" % self.lessonname
             # threading.Thread(target=say_something,args=(meg,)).start()
@@ -305,6 +366,7 @@ class Lesson:
         # 程序在上课中途运行，由_current_problem发送的已解锁题目数据，得到的返回值。
         # 此处需要筛选未到期的题目进行回答。
         elif op == "probleminfo":
+            print(f"收到probleminfo事件，数据: {data}")
             if data["limit"] != -1:
                 time_left = int(
                     data["limit"] - (int(data["now"]) - int(data["dt"])) / 1000
@@ -313,6 +375,7 @@ class Lesson:
                 time_left = data["limit"]
             # 筛选未到期题目
             if time_left > 0 or time_left == -1:
+                print(f"题目剩余时间: {time_left}, 自动答题设置: {self.config['auto_answer']}")
                 if self.config["auto_answer"]:
                     self.start_answer(data["problemid"], time_left)
                 else:
@@ -321,8 +384,15 @@ class Lesson:
                     )
 
     def start_answer(self, problemid, limit):
+        print(f"开始答题，problemid: {problemid}, limit: {limit}")
+        print(f"当前题目列表长度: {len(self.problems_ls)}")
+        print(f"当前题目列表中的所有problemId: {[p.get('problemId', 'None') for p in self.problems_ls]}")
+        
         for promble in self.problems_ls:
             if promble["problemId"] == problemid:
+                print(f"找到匹配题目，题目ID: {problemid}")
+                print(f"题目完整数据: {promble}")
+                
                 if promble["result"] is not None:
                     # 如果该题已经作答过，直接跳出函数以忽略该题
                     # 该情况理论上只会出现在启动监听时
@@ -358,42 +428,13 @@ class Lesson:
                                 "blanks": blanks
                             }
                             
-                            self.add_message(f"{self.lessonname}: 正在使用AI获取答案，题目: {question_info['title']}", 3)
+                            print(f"构建的题目信息: {question_info}")
                             
-                            # 调用AI获取答案
-                            ai_answer = scai.get_answer(question_info)
-                            if ai_answer:
-                                # 直接使用AI返回的答案，AI已经判断了题型并返回了正确格式
-                                answers = ai_answer if isinstance(ai_answer, list) else [ai_answer]
-                                
-                                # 对于填空题，如果AI错误地返回了选项字母，尝试使用blanks中的答案
-                                if blanks and answers and all(isinstance(item, str) and len(item) == 1 and item.isalpha() and item.isupper() for item in answers):
-                                    print(f"警告：AI为填空题返回了选项字母，使用预设答案")
-                                    answers = []
-                                    for blank in blanks:
-                                        # 检查answers列表是否为空
-                                        if blank.get("answers") and len(blank["answers"]) > 0:
-                                            answers.append(random.choice(blank["answers"]))
-                                        else:
-                                            # 如果答案列表为空，使用空字符串作为答案
-                                            answers.append("")
-                                            self.add_message(f"{self.lessonname}: 警告：填空题答案列表为空，使用空字符串", 3)
-                                self.add_message(f"{self.lessonname}: 使用AI获取答案成功: {answers}", 3)
-                                # AI答题成功消息使用可配置弹窗（仅在AI启用时显示）
-                                if self.config.get("ai_answer", False):
-                                    show_ai_popup(f"{self.lessonname}: 使用AI获取答案成功", "AI答题", self.config)
-                            elif ai_answer is None:
-                                # AI返回None表示填空题没有预设答案，AI无法处理
-                                self.add_message(f"{self.lessonname}: 填空题没有预设答案，AI无法处理", 3)
-                                # 尝试使用空字符串作为答案
-                                if blanks:
-                                    for i in blanks:
-                                        answers.append("")
-                                else:
-                                    answers = [""]
-                                self.add_message(f"{self.lessonname}: 使用空字符串作为答案: {answers}", 3)
-                            else:
-                                # AI无法获取答案时，回退到随机选择
+                            # 检查题目是否为空
+                            if not question_info["title"].strip() and not question_info["options"]:
+                                self.add_message(f"{self.lessonname}: 题目内容为空，无法使用AI获取答案", 3)
+                                print(f"题目内容为空 - title: '{question_info['title']}', options: {question_info['options']}")
+                                # 回退到随机选择
                                 if blanks:
                                     for i in blanks:
                                         # 检查answers列表是否为空
@@ -405,7 +446,62 @@ class Lesson:
                                             self.add_message(f"{self.lessonname}: 警告：填空题答案列表为空，使用空字符串", 3)
                                 else:
                                     answers = promble.get("answers", [])
-                                self.add_message(f"{self.lessonname}: AI无法获取答案，使用随机选择: {answers}", 3)
+                                self.add_message(f"{self.lessonname}: 使用随机选择: {answers}", 3)
+                            else:
+                                self.add_message(f"{self.lessonname}: 正在使用AI获取答案，题目: {question_info['title']}", 3)
+                                
+                                # 调用AI获取答案
+                                ai_answer = scai.get_answer(question_info)
+                                if ai_answer:
+                                    # 直接使用AI返回的答案，AI已经判断了题型并返回了正确格式
+                                    answers = ai_answer if isinstance(ai_answer, list) else [ai_answer]
+                                    
+                                    # 对于填空题，如果AI错误地返回了选项字母，尝试使用blanks中的答案
+                                    if blanks and answers and all(isinstance(item, str) and len(item) == 1 and item.isalpha() and item.isupper() for item in answers):
+                                        print(f"警告：AI为填空题返回了选项字母，使用预设答案")
+                                        answers = []
+                                        for blank in blanks:
+                                            # 检查answers列表是否为空
+                                            if blank.get("answers") and len(blank["answers"]) > 0:
+                                                answers.append(random.choice(blank["answers"]))
+                                            else:
+                                                # 如果答案列表为空，使用空字符串作为答案
+                                                answers.append("")
+                                                self.add_message(f"{self.lessonname}: 警告：填空题答案列表为空，使用空字符串", 3)
+                                    self.add_message(f"{self.lessonname}: 使用AI获取答案成功: {answers}", 3)
+                                    # AI答题成功消息使用可配置弹窗（仅在AI启用时显示）
+                                    if self.config.get("ai_answer", False):
+                                        show_ai_popup(f"{self.lessonname}: 使用AI获取答案成功", "AI答题", self.config)
+                                elif ai_answer is None:
+                                    # AI返回None表示填空题没有预设答案，AI无法处理，或者题目为空
+                                    self.add_message(f"{self.lessonname}: AI无法获取答案", 3)
+                                    # 回退到随机选择
+                                    if blanks:
+                                        for i in blanks:
+                                            # 检查answers列表是否为空
+                                            if i.get("answers") and len(i["answers"]) > 0:
+                                                answers.append(random.choice(i["answers"]))
+                                            else:
+                                                # 如果答案列表为空，使用空字符串作为答案
+                                                answers.append("")
+                                                self.add_message(f"{self.lessonname}: 警告：填空题答案列表为空，使用空字符串", 3)
+                                    else:
+                                        answers = promble.get("answers", [])
+                                    self.add_message(f"{self.lessonname}: 使用随机选择: {answers}", 3)
+                                else:
+                                    # AI无法获取答案时，回退到随机选择
+                                    if blanks:
+                                        for i in blanks:
+                                            # 检查answers列表是否为空
+                                            if i.get("answers") and len(i["answers"]) > 0:
+                                                answers.append(random.choice(i["answers"]))
+                                            else:
+                                                # 如果答案列表为空，使用空字符串作为答案
+                                                answers.append("")
+                                                self.add_message(f"{self.lessonname}: 警告：填空题答案列表为空，使用空字符串", 3)
+                                    else:
+                                        answers = promble.get("answers", [])
+                                    self.add_message(f"{self.lessonname}: AI无法获取答案，使用随机选择: {answers}", 3)
                     except Exception as e:
                         # AI调用失败时，回退到随机选择
                         self.add_message(f"{self.lessonname}: AI获取答案异常: {str(e)}", 3)
@@ -465,12 +561,15 @@ class Lesson:
 
     def _current_problem(self, wsapp, promblemid):
         # 为获取已解锁的问题详情信息，向wsapp发送probleminfo
+        print(f"发送probleminfo请求，题目ID: {promblemid}")
+        print(f"课程ID: {self.lessonid}")
         query_problem = {
             "op": "probleminfo",
             "lessonid": self.lessonid,
             "problemid": promblemid,
             "msgid": 1,
         }
+        print(f"发送的probleminfo请求: {query_problem}")
         wsapp.send(json.dumps(query_problem))
 
     def start_lesson(self, delay, callback):
